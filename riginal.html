@@ -1,0 +1,321 @@
+<!DOCTYPE html> ,b
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title> Readify</title>
+<style>
+:root{
+--bg:#0f1117;
+--card:#1b1f2b;
+--text:#fff;
+--accent:#ff4da6;
+--muted:#aaa;
+}
+body.light{
+--bg:#f2f2f2;
+--card:#ffffff;
+--text:#111;
+--muted:#555;
+}
+body{
+margin:0;
+font-family:Arial;
+background:var(--bg);
+color:var(--text);
+transition:.3s;
+}
+header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:12px 15px;
+background:var(--card);
+position:sticky;top:0;z-index:1000;
+}
+button{
+padding:9px 12px;
+border:none;
+border-radius:10px;
+background:var(--accent);
+color:#fff;
+cursor:pointer;
+margin:3px;
+transition:.2s;
+}
+button:hover{transform:scale(1.05);}
+.container{padding:18px;}
+.hidden{display:none;}
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+gap:12px;
+}
+.card{
+background:var(--card);
+padding:12px;
+border-radius:14px;
+transition:.2s;
+cursor:pointer;
+}
+.card:hover{transform:scale(1.02);}
+input,textarea,select{
+width:100%;padding:10px;margin:5px 0;
+border-radius:10px;border:none;
+background:#222;color:#fff;
+}
+.bookimg{
+width:100%;height:400px;object-fit:cover;border-radius:10px;
+}
+.readerBox{
+max-width:850px;margin:auto;
+background:var(--card);
+padding:20px;border-radius:15px;
+line-height:1.7;
+}
+.readerMode .readerBox{
+font-family:Georgia;
+line-height:2;
+}
+.zoomText{font-size:18px;}
+.toast{
+position:fixed;bottom:15px;right:15px;
+background:#000;color:#fff;padding:10px;border-radius:10px;
+display:none;
+}
+#suggestions{
+background:var(--card);
+border-radius:10px;
+max-height:150px;
+overflow:auto;
+margin-bottom:10px;
+}
+
+.suggest{
+padding:8px;
+cursor:pointer;
+}
+
+.suggest:hover{
+background:#333;
+}
+</style>
+</head>
+<body>
+
+<header>
+<div>📚 Readify</div>
+<div>
+<button onclick="show('home')">Home</button>
+<button onclick="show('login')">Login</button>
+<button onclick="show('admin')">Admin</button>
+<button onclick="toggleTheme()">🌙</button>
+</div>
+</header>
+
+<div id="toast" class="toast"></div>
+
+<!-- LOGIN -->
+<div id="login" class="container">
+<h2>Login / Signup</h2>
+<input id="user" placeholder="Username">
+<input id="pass" type="password" placeholder="Password">
+<button onclick="signup()">Signup</button>
+<button onclick="login()">Login</button>
+</div>
+
+<!-- HOME -->
+<div id="home" class="container hidden">
+    <input id="search" placeholder="Search books..." onkeyup="searchBooks()">
+<div id="suggestions"></div>
+<h2>Books</h2>
+<div id="books" class="grid"></div>
+<h2>Continue Reading</h2>
+<div id="continue" class="grid"></div>
+<h2>AI Picks</h2>
+<div id="ai" class="grid"></div>
+</div>
+
+<!-- READER -->
+<div id="reader" class="container hidden">
+<div class="readerBox">
+<h2 id="title"></h2>
+<img id="img" class="bookimg">
+<p id="content" class="zoomText"></p>
+
+<button onclick="prev()">⬅</button>
+<button onclick="next()">➡</button>
+
+<h3>🔎 Reader Tools</h3>
+<button onclick="zoomIn()">A+</button>
+<button onclick="zoomOut()">A-</button>
+<button onclick="toggleReaderMode()">Reader Mode</button>
+
+<h3>⭐ Rate</h3>
+<select id="rate">
+<option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+</select>
+<button onclick="rateBook()">Save</button>
+
+<h3>💬 Comments</h3>
+<input id="commentInput" placeholder="Write comment">
+<button onclick="addComment()">Post</button>
+<div id="comments"></div>
+</div>
+</div>
+
+<!-- ADMIN -->
+<div id="admin" class="container hidden">
+<h2>👑 Admin Dashboard Pro</h2>
+
+<div id="stats" class="grid"></div>
+
+<h3>Add / Edit Book</h3>
+<input id="btitle" placeholder="Book title">
+<input type="file" id="bimg" onchange="loadCover(event)">
+<img id="preview" class="bookimg">
+<textarea id="bchap" placeholder="Chapter1||Chapter2||Chapter3"></textarea>
+<button onclick="saveBook()">Save Book</button>
+
+<h3>Search</h3>
+<input id="searchBook" onkeyup="renderAdmin()" placeholder="Search books">
+<input id="searchUser" onkeyup="renderAdmin()" placeholder="Search users">
+
+<h3>Books</h3>
+<div id="bookAdmin" class="grid"></div>
+
+<h3>Users</h3>
+<div id="userAdmin" class="grid"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+let users=JSON.parse(localStorage.getItem('users'))//||{};
+let books=JSON.parse(localStorage.getItem('books'))||{
+"Sample Book":{image:'',chapters:['Welcome'],ratings:[],comments:[]}
+};
+
+let currentUser=null;
+let currentBook=null;
+let index=0;
+let editing=null;
+let zoom=18;
+let readerMode=false;
+
+function toast(m){
+let t=$('toast');t.innerText=m;t.style.display='block';setTimeout(()=>t.style.display='none',1500);
+}
+
+function save(){
+localStorage.setItem('users',JSON.stringify(users));
+localStorage.setItem('books',JSON.stringify(books));
+}
+
+function show(p){
+if(p==='admin' && users[currentUser]?.role!=='admin')return toast('Admin only');
+['home','login','reader','admin'].forEach(x=>$(x).classList.add('hidden'));
+$(p).classList.remove('hidden');
+if(p==='home')renderHome();
+if(p==='admin')renderAdmin();
+}
+
+function signup(){
+let u=$('user').value,p=$('pass').value;
+if(!users[u]){
+users[u]={password:p,role:(u==='bayo'&&p==='bayo')?'admin':'user',history:[],banned:false};
+save();toast('Account created');
+}else toast('Exists');
+}
+
+function login(){
+let u=$('user').value,p=$('pass').value;
+if(users[u]&&users[u].password===p){
+if(users[u].banned)return toast('Banned');
+currentUser=u;currentBook=null;index=0;
+show('home');
+toast('Welcome '+u);
+}else toast('Wrong login');
+}
+
+function renderHome(){
+$('books').innerHTML='';
+$('continue').innerHTML='';
+$('ai').innerHTML='';
+
+for(let t in books){
+$('books').innerHTML+=`<div class='card' onclick="openBook('${t}')"><img src='${books[t].image||''}' class='bookimg'><b>${t}</b></div>`;
+}
+
+(users[currentUser]?.history||[]).slice(-3).forEach(t=>{
+if(books[t])$('continue').innerHTML+=`<div class='card' onclick="openBook('${t}')">${t}</div>`;
+});
+
+Object.keys(books).slice(0,3).forEach(t=>{
+$('ai').innerHTML+=`<div class='card'>${t}</div>`;
+});
+}
+
+function openBook(t){
+if(!books[t])return;
+currentBook=t;index=0;
+if(currentUser){users[currentUser].history.push(t);save();}
+show('reader');loadBook();
+}
+
+function loadBook(){
+if(!books[currentBook])return;
+$('title').innerText=currentBook;
+$('img').src=books[currentBook].image||'';
+$('content').innerText=books[currentBook].chapters[index]||'';
+$('content').style.fontSize=zoom+'px';
+renderComments();
+}
+
+function next(){if(index<books[currentBook].chapters.length-1){index++;loadBook();}}
+function prev(){if(index>0){index--;loadBook();}}
+
+function zoomIn(){zoom+=2;loadBook();}
+function zoomOut(){zoom=Math.max(12,zoom-2);loadBook();}
+
+function toggleReaderMode(){readerMode=!readerMode;document.body.classList.toggle('readerMode');toast('Reader Mode');}
+
+function rateBook(){books[currentBook].ratings.push(parseInt($('rate').value));save();toast('Rated');}
+
+function addComment(){if(!currentUser)return;books[currentBook].comments.push({user:currentUser,text:$('commentInput').value});$('commentInput').value='';save();renderComments();}
+
+function renderComments(){$('comments').innerHTML='';(books[currentBook].comments||[]).forEach(c=>{$('comments').innerHTML+=`<div class='card'><b>${c.user}</b>: ${c.text}</div>`;});}
+
+function loadCover(e){let r=new FileReader();r.onload=()=>{$('preview').src=r.result};r.readAsDataURL(e.target.files[0]);}
+
+function saveBook(){let t=$('btitle').value.trim();if(!t)return;if(editing&&editing!==t)delete books[editing];books[t]={image:$('preview').src||'',chapters:$('bchap').value.split('||'),ratings:[],comments:[]};save();renderAdmin();renderHome();}
+
+function editBook(t){editing=t;$('btitle').value=t;$('bchap').value=books[t].chapters.join('||');$('preview').src=books[t].image;}
+
+function deleteBook(t){delete books[t];for(let u in users){users[u].history=(users[u].history||[]).filter(x=>x!==t);}save();renderAdmin();renderHome();}
+
+function ban(u){users[u].banned=!users[u].banned;save();renderAdmin();}
+
+function toggleAdmin(u){users[u].role=users[u].role==='admin'?'user':'admin';save();renderAdmin();}
+
+function renderStats(){
+let tu=Object.keys(users).length,tb=Object.keys(books).length,ta=0,bb=0,cc=0,rr=0;
+for(let u in users){if(users[u].role==='admin')ta++;if(users[u].banned)bb++;}
+for(let b in books){cc+=(books[b].comments||[]).length;rr+=(books[b].ratings||[]).length;}
+$('stats').innerHTML=`<div class='card'>Users<br>${tu}</div><div class='card'>Books<br>${tb}</div><div class='card'>Admins<br>${ta}</div><div class='card'>Banned<br>${bb}</div><div class='card'>Comments<br>${cc}</div><div class='card'>Ratings<br>${rr}</div>`;
+}
+
+function renderAdmin(){renderStats();
+$('bookAdmin').innerHTML='';$('userAdmin').innerHTML='';
+let sb=$('searchBook').value.toLowerCase();let su=$('searchUser').value.toLowerCase();
+for(let t in books){if(!t.toLowerCase().includes(sb))continue;$('bookAdmin').innerHTML+=`<div class='card'><b>${t}</b><button onclick="editBook('${t}')">Edit</button><button onclick="deleteBook('${t}')">Del</button></div>`;}
+for(let u in users){if(!u.toLowerCase().includes(su))continue;$('userAdmin').innerHTML+=`<div class='card'><b>${u}</b><p>${users[u].role}</p><button onclick="ban('${u}')">Ban</button><button onclick="toggleAdmin('${u}')">Admin</button></div>`;}
+}
+
+function toggleTheme(){document.body.classList.toggle('light');localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark');}
+if(localStorage.getItem('theme')==='light')document.body.classList.add('light');
+
+renderHome();
+</script>
+</body>
+</html>
